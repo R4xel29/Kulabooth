@@ -18,6 +18,7 @@ data class CapExItem(
 data class MasterIngredient(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val name: String,
+    val unit: String = "gr",
     val packagePrice: Double,
     val packageSize: Double, // in gram/ml/pcs
     val currentStock: Double = 0.0,
@@ -61,12 +62,14 @@ data class OpexItem(
 @Entity(tableName = "product_settings")
 data class ProductSettings(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val webId: String? = null,
     val productName: String = "Matcha Latte Ice 14oz",
     val sellingPrice: Double = 8000.0,
     val isOnline: Boolean = false, // false = Offline/Langsung, true = Online Delivery (20% commission)
     val wastagePercent: Double = 5.0, // 5% by default
     val workingDays: Int = 26,       // 26 days default
-    val targetDailySales: Int = 50   // 50 cups default
+    val targetDailySales: Int = 50,  // 50 cups default
+    val imageUrl: String? = null
 )
 
 @Entity(tableName = "sales")

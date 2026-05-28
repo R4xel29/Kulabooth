@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
         Sale::class,
         ApiConfig::class
     ],
-    version = 5,
+    version = 7,
     exportSchema = false
 )
 abstract class KulaBoothDatabase : RoomDatabase() {
@@ -58,16 +58,16 @@ abstract class KulaBoothDatabase : RoomDatabase() {
                 db.execSQL("INSERT INTO capex_items (id, name, qty, unitPrice) VALUES (4, 'Timbangan Digital & Sendok Takar', 1, 70000.0)")
 
                 // Seeding Master Ingredients database table (Daftar Bahan Baku Global with stock and threshold)
-                db.execSQL("INSERT INTO master_ingredients (id, name, packagePrice, packageSize, currentStock, minimumStock) VALUES (1, 'Powder Matcha Premix', 65000.0, 1000.0, 5000.0, 500.0)")
-                db.execSQL("INSERT INTO master_ingredients (id, name, packagePrice, packageSize, currentStock, minimumStock) VALUES (2, 'Susu Evaporasi', 16000.0, 400.0, 2400.0, 400.0)")
-                db.execSQL("INSERT INTO master_ingredients (id, name, packagePrice, packageSize, currentStock, minimumStock) VALUES (3, 'Air & Es Batu Kristal', 10000.0, 5000.0, 25000.0, 5000.0)")
-                db.execSQL("INSERT INTO master_ingredients (id, name, packagePrice, packageSize, currentStock, minimumStock) VALUES (4, 'Plastic Cup + Lid 14oz', 500.0, 1.0, 150.0, 30.0)")
-                db.execSQL("INSERT INTO master_ingredients (id, name, packagePrice, packageSize, currentStock, minimumStock) VALUES (5, 'Sedotan & Kantong', 150.0, 1.0, 150.0, 30.0)")
-                db.execSQL("INSERT INTO master_ingredients (id, name, packagePrice, packageSize, currentStock, minimumStock) VALUES (6, 'Espresso Roast Java', 120000.0, 1000.0, 4000.0, 500.0)")
-                db.execSQL("INSERT INTO master_ingredients (id, name, packagePrice, packageSize, currentStock, minimumStock) VALUES (7, 'Susu UHT Full Cream', 18000.0, 1000.0, 10000.0, 2000.0)")
-                db.execSQL("INSERT INTO master_ingredients (id, name, packagePrice, packageSize, currentStock, minimumStock) VALUES (8, 'Sirup Gula Aren', 35000.0, 1000.0, 4000.0, 500.0)")
-                db.execSQL("INSERT INTO master_ingredients (id, name, packagePrice, packageSize, currentStock, minimumStock) VALUES (9, 'Premium Cocoa Powder', 90000.0, 1000.0, 3000.0, 500.0)")
-                db.execSQL("INSERT INTO master_ingredients (id, name, packagePrice, packageSize, currentStock, minimumStock) VALUES (10, 'Susu Kental Manis', 12000.0, 370.0, 2220.0, 370.0)")
+                db.execSQL("INSERT INTO master_ingredients (id, name, unit, packagePrice, packageSize, currentStock, minimumStock) VALUES (1, 'Powder Matcha Premix', 'gr', 65000.0, 1000.0, 5000.0, 500.0)")
+                db.execSQL("INSERT INTO master_ingredients (id, name, unit, packagePrice, packageSize, currentStock, minimumStock) VALUES (2, 'Susu Evaporasi', 'ml', 16000.0, 400.0, 2400.0, 400.0)")
+                db.execSQL("INSERT INTO master_ingredients (id, name, unit, packagePrice, packageSize, currentStock, minimumStock) VALUES (3, 'Air & Es Batu Kristal', 'ml', 10000.0, 5000.0, 25000.0, 5000.0)")
+                db.execSQL("INSERT INTO master_ingredients (id, name, unit, packagePrice, packageSize, currentStock, minimumStock) VALUES (4, 'Plastic Cup + Lid 14oz', 'pcs', 500.0, 1.0, 150.0, 30.0)")
+                db.execSQL("INSERT INTO master_ingredients (id, name, unit, packagePrice, packageSize, currentStock, minimumStock) VALUES (5, 'Sedotan & Kantong', 'pcs', 150.0, 1.0, 150.0, 30.0)")
+                db.execSQL("INSERT INTO master_ingredients (id, name, unit, packagePrice, packageSize, currentStock, minimumStock) VALUES (6, 'Espresso Roast Java', 'gr', 120000.0, 1000.0, 4000.0, 500.0)")
+                db.execSQL("INSERT INTO master_ingredients (id, name, unit, packagePrice, packageSize, currentStock, minimumStock) VALUES (7, 'Susu UHT Full Cream', 'ml', 18000.0, 1000.0, 10000.0, 2000.0)")
+                db.execSQL("INSERT INTO master_ingredients (id, name, unit, packagePrice, packageSize, currentStock, minimumStock) VALUES (8, 'Sirup Gula Aren', 'ml', 35000.0, 1000.0, 4000.0, 500.0)")
+                db.execSQL("INSERT INTO master_ingredients (id, name, unit, packagePrice, packageSize, currentStock, minimumStock) VALUES (9, 'Premium Cocoa Powder', 'gr', 90000.0, 1000.0, 3000.0, 500.0)")
+                db.execSQL("INSERT INTO master_ingredients (id, name, unit, packagePrice, packageSize, currentStock, minimumStock) VALUES (10, 'Susu Kental Manis', 'ml', 12000.0, 370.0, 2220.0, 370.0)")
 
                 // Seeding Product Settings (Products)
                 db.execSQL("INSERT INTO product_settings (id, productName, sellingPrice, isOnline, wastagePercent, workingDays, targetDailySales) VALUES (1, 'Matcha Latte Ice 14oz', 10000.0, 0, 5.0, 26, 40)")

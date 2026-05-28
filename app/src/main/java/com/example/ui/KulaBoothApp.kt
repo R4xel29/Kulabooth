@@ -155,7 +155,8 @@ fun KulaBoothApp(viewModel: KulaBoothViewModel) {
                     onSyncSales = viewModel::syncSalesToWeb,
                     onClearSyncStatus = viewModel::clearSyncStatus,
                     onRestockIngredient = viewModel::restockMasterIngredient,
-                    onUpdateThreshold = viewModel::updateMasterIngredientThreshold
+                    onUpdateThreshold = viewModel::updateMasterIngredientThreshold,
+                    onSyncMenu = viewModel::syncProductsFromWeb
                 )
             }
         }
@@ -656,12 +657,23 @@ fun RecipeCostingTab(
                                     .padding(horizontal = 14.dp, vertical = 8.dp)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.LocalCafe,
-                                        contentDescription = null,
-                                        tint = tcChip,
-                                        modifier = Modifier.size(16.dp)
-                                    )
+                                    if (!prod.imageUrl.isNullOrBlank()) {
+                                        coil.compose.AsyncImage(
+                                            model = prod.imageUrl,
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .size(18.dp)
+                                                .clip(CircleShape),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Default.LocalCafe,
+                                            contentDescription = null,
+                                            tint = tcChip,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = prod.productName,
@@ -820,202 +832,147 @@ fun RecipeCostingTab(
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-                    Text(
-                        text = "Pengaturan Produk & Pricing",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = if (isSystemInDarkTheme()) EmeraldAccent else EmeraldDark
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Product name
-                    OutlinedTextField(
-                        value = productNameInput,
-                        onValueChange = {
-                            productNameInput = it
-                            onUpdateSettings(it, null, null, null, null, null)
-                        },
-                        label = { Text("Nama Produk") },
-                        placeholder = { Text("Contoh: Matcha Latte Ice") },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            focusedBorderColor = EmeraldPrimary,
-                            unfocusedBorderColor = if (isSystemInDarkTheme()) Color(0xFF115E59) else Color(0xFFE2E8F0),
-                            focusedLabelColor = EmeraldPrimary,
-                            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        modifier = Modifier.fillMaxWidth().testTag("product_name_input")
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Rekomendasi Menu Populer:",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    val menuPresets = listOf(
-                        Pair("Matcha Latte Ice", 15000.0),
-                        Pair("Kopi Gula Aren", 12000.0),
-                        Pair("Chocolate Ice Premium", 14000.0),
-                        Pair("Mango Smoothies Creamy", 16000.0),
-                        Pair("Thai Tea Milk Ice", 10000.0),
-                        Pair("Es Teh Manis Jumbo", 5000.0)
-                    )
-                    Row(
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    if (!settings.imageUrl.isNullOrBlank()) {
+                        coil.compose.AsyncImage(
+                            model = settings.imageUrl,
+                            contentDescription = "Gambar ${settings.productName}",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(180.dp)
+                                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                        )
+                    }
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            .padding(16.dp)
                     ) {
-                        menuPresets.forEach { preset ->
-                            val isSelected = productNameInput.equals(preset.first, ignoreCase = true)
-                            val chipBg = if (isSelected) EmeraldPrimary else (if (isSystemInDarkTheme()) Color(0xFF114232) else EmeraldLight)
-                            val chipText = if (isSelected) Color.White else (if (isSystemInDarkTheme()) EmeraldAccent else EmeraldDark)
-                            
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(chipBg)
-                                    .clickable {
-                                        productNameInput = preset.first
-                                        sellingPriceInput = preset.second.toInt().toString()
-                                        onUpdateSettings(preset.first, preset.second, null, null, null, null)
-                                    }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                        val imagePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                            contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+                        ) { uri: android.net.Uri? ->
+                            if (uri != null) {
+                                viewModel.uploadAndSetProductImage(settings.id, uri)
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Pengaturan Produk & Pricing",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = if (isSystemInDarkTheme()) EmeraldAccent else EmeraldDark
+                            )
+                            Button(
+                                onClick = { imagePickerLauncher.launch("image/*") },
+                                colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.height(32.dp)
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.LocalCafe,
-                                        contentDescription = null,
-                                        tint = chipText,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = preset.first,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = chipText
-                                    )
+                                Icon(
+                                    imageVector = Icons.Default.PhotoCamera,
+                                    contentDescription = "Upload Foto",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Foto", fontSize = 11.sp, color = Color.White)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Product name
+                        OutlinedTextField(
+                            value = productNameInput,
+                            onValueChange = {
+                                productNameInput = it
+                                onUpdateSettings(it, null, null, null, null, null)
+                            },
+                            label = { Text("Nama Produk") },
+                            placeholder = { Text("Contoh: Matcha Latte Ice") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                focusedBorderColor = EmeraldPrimary,
+                                unfocusedBorderColor = if (isSystemInDarkTheme()) Color(0xFF115E59) else Color(0xFFE2E8F0),
+                                focusedLabelColor = EmeraldPrimary,
+                                unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            modifier = Modifier.fillMaxWidth().testTag("product_name_input")
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Rekomendasi Menu Populer:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        val menuPresets = listOf(
+                            Pair("Matcha Latte Ice", 15000.0),
+                            Pair("Kopi Gula Aren", 12000.0),
+                            Pair("Chocolate Ice Premium", 14000.0),
+                            Pair("Mango Smoothies Creamy", 16000.0),
+                            Pair("Thai Tea Milk Ice", 10000.0),
+                            Pair("Es Teh Manis Jumbo", 5000.0)
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            menuPresets.forEach { preset ->
+                                val isSelected = productNameInput.equals(preset.first, ignoreCase = true)
+                                val chipBg = if (isSelected) EmeraldPrimary else (if (isSystemInDarkTheme()) Color(0xFF114232) else EmeraldLight)
+                                val chipText = if (isSelected) Color.White else (if (isSystemInDarkTheme()) EmeraldAccent else EmeraldDark)
+                                
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(chipBg)
+                                        .clickable {
+                                            productNameInput = preset.first
+                                            sellingPriceInput = preset.second.toInt().toString()
+                                            onUpdateSettings(preset.first, preset.second, null, null, null, null)
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.LocalCafe,
+                                            contentDescription = null,
+                                            tint = chipText,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = preset.first,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = chipText
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
-                    Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                    // Selling price & helper currency text
-                    OutlinedTextField(
-                        value = sellingPriceInput,
-                        onValueChange = {
-                            sellingPriceInput = it
-                            onUpdateSettings(null, Utils.parseDouble(it), null, null, null, null)
-                        },
-                        label = { Text("Harga Jual ke Konsumen (Rp)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            focusedBorderColor = EmeraldPrimary,
-                            unfocusedBorderColor = if (isSystemInDarkTheme()) Color(0xFF115E59) else Color(0xFFE2E8F0),
-                            focusedLabelColor = EmeraldPrimary,
-                            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        modifier = Modifier.fillMaxWidth().testTag("product_price_input")
-                    )
-                    Text(
-                        text = "Harga Terformat: " + Utils.formatRupiah(Utils.parseDouble(sellingPriceInput)),
-                        fontSize = 11.sp,
-                        color = EmeraldPrimary,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(top = 4.dp, start = 4.dp)
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Sales Channel Toggle Pills
-                    Text(
-                        text = "Saluran / Channel Penjualan",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF64748B)
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFFF1F5F9))
-                            .padding(4.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (!settings.isOnline) EmeraldPrimary else Color.Transparent)
-                                .clickable { onUpdateSettings(null, null, false, null, null, null) }
-                                .padding(vertical = 10.dp),
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Storefront,
-                                contentDescription = "Offline Store",
-                                tint = if (!settings.isOnline) Color.White else Color(0xFF475569),
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                "Offline/Langsung (Komisi 0%)",
-                                color = if (!settings.isOnline) Color.White else Color(0xFF475569),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Row(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (settings.isOnline) EmeraldPrimary else Color.Transparent)
-                                .clickable { onUpdateSettings(null, null, true, null, null, null) }
-                                .padding(vertical = 10.dp),
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                Icons.Default.DeliveryDining,
-                                contentDescription = "Online Delivery",
-                                tint = if (settings.isOnline) Color.White else Color(0xFF475569),
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                "Online Delivery (Potong 20%)",
-                                color = if (settings.isOnline) Color.White else Color(0xFF475569),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Wastage / Buffer percent
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                        // Selling price & helper currency text
                         OutlinedTextField(
-                            value = wastagePercentInput,
+                            value = sellingPriceInput,
                             onValueChange = {
-                                wastagePercentInput = it
-                                onUpdateSettings(null, null, null, Utils.parseDouble(it), null, null)
+                                sellingPriceInput = it
+                                onUpdateSettings(null, Utils.parseDouble(it), null, null, null, null)
                             },
-                            label = { Text("Wastage / Buffer Margin (%)") },
+                            label = { Text("Harga Jual ke Konsumen (Rp)") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
@@ -1026,10 +983,108 @@ fun RecipeCostingTab(
                                 focusedLabelColor = EmeraldPrimary,
                                 unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
                             ),
-                            modifier = Modifier.weight(1f).testTag("wastage_input")
+                            modifier = Modifier.fillMaxWidth().testTag("product_price_input")
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        InfoTooltip(text = "Mengantisipasi bahan tumpah atau es mencair.")
+                        Text(
+                            text = "Harga Terformat: " + Utils.formatRupiah(Utils.parseDouble(sellingPriceInput)),
+                            fontSize = 11.sp,
+                            color = EmeraldPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(top = 4.dp, start = 4.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Sales Channel Toggle Pills
+                        Text(
+                            text = "Saluran / Channel Penjualan",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF64748B)
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFF1F5F9))
+                                .padding(4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (!settings.isOnline) EmeraldPrimary else Color.Transparent)
+                                    .clickable { onUpdateSettings(null, null, false, null, null, null) }
+                                    .padding(vertical = 10.dp),
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Storefront,
+                                    contentDescription = "Offline Store",
+                                    tint = if (!settings.isOnline) Color.White else Color(0xFF475569),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "Offline/Langsung (Komisi 0%)",
+                                    color = if (!settings.isOnline) Color.White else Color(0xFF475569),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (settings.isOnline) EmeraldPrimary else Color.Transparent)
+                                    .clickable { onUpdateSettings(null, null, true, null, null, null) }
+                                    .padding(vertical = 10.dp),
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.DeliveryDining,
+                                    contentDescription = "Online Delivery",
+                                    tint = if (settings.isOnline) Color.White else Color(0xFF475569),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "Online Delivery (Potong 20%)",
+                                    color = if (settings.isOnline) Color.White else Color(0xFF475569),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Wastage / Buffer percent
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = wastagePercentInput,
+                                onValueChange = {
+                                    wastagePercentInput = it
+                                    onUpdateSettings(null, null, null, Utils.parseDouble(it), null, null)
+                                },
+                                label = { Text("Wastage / Buffer Margin (%)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                    focusedBorderColor = EmeraldPrimary,
+                                    unfocusedBorderColor = if (isSystemInDarkTheme()) Color(0xFF115E59) else Color(0xFFE2E8F0),
+                                    focusedLabelColor = EmeraldPrimary,
+                                    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
+                                modifier = Modifier.weight(1f).testTag("wastage_input")
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            InfoTooltip(text = "Mengantisipasi bahan tumpah atau es mencair.")
+                        }
                     }
                 }
             }
@@ -2888,7 +2943,8 @@ fun SalesReportTab(
     onSyncSales: () -> Unit,
     onClearSyncStatus: () -> Unit,
     onRestockIngredient: (Int, Double) -> Unit,
-    onUpdateThreshold: (Int, Double) -> Unit
+    onUpdateThreshold: (Int, Double) -> Unit,
+    onSyncMenu: () -> Unit
 ) {
     var selectedTabState by remember { mutableStateOf(0) } // 0 = Transaksi, 1 = Stok & Sync
 
@@ -3215,7 +3271,7 @@ fun SalesReportTab(
 
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            // Action buttons: Save & Sync
+                            // Action buttons: Save & Sync & Download Menu
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -3230,14 +3286,25 @@ fun SalesReportTab(
                                 }
 
                                 Button(
+                                    onClick = { onSyncMenu() },
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                                    modifier = Modifier.weight(1f).testTag("sync_menu_button")
+                                ) {
+                                    Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Unduh Menu", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+
+                                Button(
                                     onClick = { onSyncSales() },
                                     shape = RoundedCornerShape(8.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
                                     modifier = Modifier.weight(1f).testTag("sync_web_button")
                                 ) {
-                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.Upload, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Sync ke Web", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Text("Kirim Laporan", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                 }
                             }
 

@@ -489,6 +489,13 @@ class KulaBoothViewModel(application: Application) : AndroidViewModel(applicatio
                 autoSync = autoSync
             )
             repository.insertApiConfig(updated)
+
+            // Jadwalkan atau batalkan auto-sync WorkManager sesuai preferensi
+            if (autoSync) {
+                com.example.data.SyncWorker.schedule(getApplication())
+            } else {
+                com.example.data.SyncWorker.cancel(getApplication())
+            }
         }
     }
 
@@ -503,25 +510,337 @@ class KulaBoothViewModel(application: Application) : AndroidViewModel(applicatio
                 _syncStatus.value = "Peringatan: URL Admin Panel belum dikonfigurasi!"
                 return@launch
             }
-            
-            // Simulate network transaction latency
-            kotlinx.coroutines.delay(1500)
-            
-            val salesCount = allSales.value.size
-            if (salesCount == 0) {
-                _syncStatus.value = "Selesai: Tidak ada transaksi penjualan untuk dikirim."
+
+            var baseUrl = config.baseUrl.trim()
+            if (!baseUrl.endsWith("/")) {
+                baseUrl += "/"
+            }
+            if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+                baseUrl = "http://$baseUrl"
+            }
+
+            val salesList = allSales.value
+            val localProductsToSync = allProducts.value.filter { it.webId == null }.map { prod ->
+                LocalProductDto(
+                    id = prod.id,
+                    name = prod.productName,
+                    price = prod.sellingPrice
+                )
+            }
+            val opexListToSync = opexItems.value.map { opex ->
+                OpexDto(
+                    id = opex.id,
+                    name = opex.name,
+                    monthlyCost = opex.monthlyCost
+                )
+            }
+            val masterIngredientsToSync = allMasterIngredients.value.map { master ->
+                MasterIngredientDto(
+                    id = master.id,
+                    name = master.name,
+                    unit = master.unit,
+                    packagePrice = master.packagePrice,
+                    packageSize = master.packageSize,
+                    currentStock = master.currentStock,
+                    minimumStock = master.minimumStock
+                )
+            }
+            val recipesToSync = allIngredients.value.map { ing ->
+                RecipeDto(
+                    id = ing.id,
+                    productId = ing.productId,
+                    masterIngredientId = ing.masterIngredientId,
+                    usageAmount = ing.usageAmount
+                )
+            }
+
+            if (salesList.isEmpty() && localProductsToSync.isEmpty() && opexListToSync.isEmpty() && masterIngredientsToSync.isEmpty() && recipesToSync.isEmpty()) {
+                _syncStatus.value = "Selesai: Tidak ada transaksi, menu, biaya operasional, bahan, atau resep untuk dikirim."
                 return@launch
             }
-            
-            _syncStatus.value = "Sync Berhasil! $salesCount transaksi terkirim & ketersediaan bahan otomatis terbarui pada Next.js."
-            
-            val updatedConfig = config.copy(lastSyncTime = System.currentTimeMillis())
-            repository.insertApiConfig(updatedConfig)
+
+            try {
+                // Initialize Moshi and Retrofit dynamically based on configured baseUrl
+                val moshi = com.squareup.moshi.Moshi.Builder()
+                    .add(com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory())
+                    .build()
+
+                val okHttpClient = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+
+                val retrofit = retrofit2.Retrofit.Builder()
+                    .baseUrl(baseUrl)
+                    .client(okHttpClient)
+                    .addConverterFactory(retrofit2.converter.moshi.MoshiConverterFactory.create(moshi))
+                    .build()
+
+                val apiService = retrofit.create(KulaBoothApiService::class.java)
+
+                val transactions = salesList.map { sale ->
+                    SyncTransaction(
+                        id = sale.id,
+                        productId = sale.productId,
+                        productName = sale.productName,
+                        sellingPrice = sale.sellingPrice,
+                        quantity = sale.quantity,
+                        timestamp = sale.timestamp
+                    )
+                }
+
+                _syncStatus.value = "Mengirimkan data transaksi, menu, biaya operasional, dan resep ke backend..."
+
+                val requestBody = SyncRequest(
+                    api_key = config.apiKey,
+                    client = "KulaBooth Android App",
+                    sales_transactions = transactions,
+                    local_products = localProductsToSync,
+                    opex_items = opexListToSync,
+                    master_ingredients = masterIngredientsToSync,
+                    recipes = recipesToSync
+                )
+
+                val response = apiService.syncSales(requestBody)
+
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    if (body != null && body.success) {
+                        val processedCount = body.processed.size
+                        val skippedCount = body.skipped.size
+                        val processedOpexCount = body.processed_opex?.size ?: 0
+
+                        // Update webId of local products that were successfully registered on the server
+                        body.created_products?.forEach { created ->
+                            val localProd = allProducts.value.find { it.id == created.localId }
+                            if (localProd != null) {
+                                repository.upsertProductSettings(localProd.copy(webId = created.webId))
+                            }
+                        }
+
+                        _syncStatus.value = buildString {
+                            append("Sync Berhasil! $processedCount transaksi, ${body.created_products?.size ?: 0} menu baru, $processedOpexCount opex, ${masterIngredientsToSync.size} bahan, ${recipesToSync.size} resep disinkronkan.")
+                            val errors = body.sync_errors
+                            if (!errors.isNullOrEmpty()) {
+                                append("\nPeringatan (${errors.size} item): ${errors.take(3).joinToString("; ")}")
+                                if (errors.size > 3) append(" ... +${errors.size - 3} lainnya")
+                            }
+                        }
+
+                        val updatedConfig = config.copy(lastSyncTime = System.currentTimeMillis())
+                        repository.insertApiConfig(updatedConfig)
+                    } else {
+                        val errMsg = body?.message ?: "Terjadi kesalahan pada backend"
+                        _syncStatus.value = "Gagal Sinkronisasi: $errMsg"
+                    }
+                } else {
+                    val code = response.code()
+                    val errorBody = response.errorBody()?.string() ?: ""
+                    _syncStatus.value = "Gagal Sinkronisasi (HTTP $code): $errorBody"
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _syncStatus.value = "Kesalahan Koneksi: ${e.localizedMessage ?: "Tidak dapat menghubungkan ke server"}"
+            }
+        }
+    }
+
+    fun syncProductsFromWeb() {
+        viewModelScope.launch {
+            _syncStatus.value = "Menghubungkan ke Next.js POS Sync Server..."
+            val config = apiConfig.value ?: ApiConfig()
+            if (config.baseUrl.isBlank()) {
+                _syncStatus.value = "Peringatan: URL Admin Panel belum dikonfigurasi!"
+                return@launch
+            }
+
+            var baseUrl = config.baseUrl.trim()
+            if (!baseUrl.endsWith("/")) {
+                baseUrl += "/"
+            }
+            if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+                baseUrl = "http://$baseUrl"
+            }
+
+            try {
+                val moshi = com.squareup.moshi.Moshi.Builder()
+                    .add(com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory())
+                    .build()
+
+                val okHttpClient = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+
+                val retrofit = retrofit2.Retrofit.Builder()
+                    .baseUrl(baseUrl)
+                    .client(okHttpClient)
+                    .addConverterFactory(retrofit2.converter.moshi.MoshiConverterFactory.create(moshi))
+                    .build()
+
+                val apiService = retrofit.create(KulaBoothApiService::class.java)
+
+                _syncStatus.value = "Mengunduh katalog menu dari web..."
+                val response = apiService.getProducts(config.apiKey)
+
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    if (body != null && body.success) {
+                        val webProducts = body.products
+                        var newCount = 0
+                        var updatedCount = 0
+
+                        webProducts.forEach { webProd ->
+                            // 1. Cari produk berdasarkan webId
+                            val existingByWebId = allProducts.value.find { it.webId == webProd.id }
+                            if (existingByWebId != null) {
+                                val updated = existingByWebId.copy(
+                                    productName = webProd.name,
+                                    sellingPrice = webProd.price,
+                                    imageUrl = webProd.image
+                                )
+                                repository.upsertProductSettings(updated)
+                                updatedCount++
+                            } else {
+                                // 2. Cari produk berdasarkan nama jika belum punya webId (mapping manual)
+                                val existingByName = allProducts.value.find { 
+                                    it.productName.trim().lowercase() == webProd.name.trim().lowercase() && it.webId == null 
+                                }
+                                if (existingByName != null) {
+                                    val updated = existingByName.copy(
+                                        webId = webProd.id,
+                                        sellingPrice = webProd.price,
+                                        imageUrl = webProd.image
+                                    )
+                                    repository.upsertProductSettings(updated)
+                                    updatedCount++
+                                } else {
+                                    // 3. Masukkan sebagai produk baru
+                                    val newProd = ProductSettings(
+                                        webId = webProd.id,
+                                        productName = webProd.name,
+                                        sellingPrice = webProd.price,
+                                        imageUrl = webProd.image,
+                                        isOnline = false,
+                                        wastagePercent = 5.0,
+                                        workingDays = 26,
+                                        targetDailySales = 30
+                                    )
+                                    repository.upsertProductSettings(newProd)
+                                    newCount++
+                                }
+                            }
+                        }
+                        _syncStatus.value = "Sync Menu Berhasil! $newCount menu baru, $updatedCount menu diperbarui."
+
+                        // Sinkronisasi stok bahan baku dari server
+                        val serverStocks = body.ingredient_stocks
+                        if (!serverStocks.isNullOrEmpty()) {
+                            val localMasters = allMasterIngredients.value
+                            var stockUpdated = 0
+                            serverStocks.forEach { serverStock ->
+                                val localMaster = localMasters.find {
+                                    it.name.trim().lowercase() == serverStock.name.trim().lowercase()
+                                }
+                                if (localMaster != null && localMaster.currentStock != serverStock.stock) {
+                                    repository.updateMasterIngredient(
+                                        localMaster.copy(currentStock = serverStock.stock)
+                                    )
+                                    stockUpdated++
+                                }
+                            }
+                            if (stockUpdated > 0) {
+                                _syncStatus.value = "Sync Menu + Stok Berhasil! $newCount menu baru, $updatedCount diperbarui, $stockUpdated stok bahan sinkron dari server."
+                            }
+                        }
+                    } else {
+                        _syncStatus.value = "Gagal Sinkronisasi Menu: Response tidak berhasil."
+                    }
+                } else {
+                    val code = response.code()
+                    val errorBody = response.errorBody()?.string() ?: ""
+                    _syncStatus.value = "Gagal Sinkronisasi Menu (HTTP $code): $errorBody"
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _syncStatus.value = "Kesalahan Koneksi Menu: ${e.localizedMessage ?: "Tidak dapat mengunduh produk"}"
+            }
         }
     }
 
     fun clearSyncStatus() {
         _syncStatus.value = null
+    }
+
+    fun uploadAndSetProductImage(productId: Int, imageUri: android.net.Uri) {
+        viewModelScope.launch {
+            _syncStatus.value = "Mengupload gambar produk..."
+            val config = apiConfig.value ?: ApiConfig()
+            if (config.baseUrl.isBlank()) {
+                _syncStatus.value = "Peringatan: URL Admin Panel belum dikonfigurasi!"
+                return@launch
+            }
+
+            var baseUrl = config.baseUrl.trim()
+            if (!baseUrl.endsWith("/")) baseUrl += "/"
+            if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) baseUrl = "http://$baseUrl"
+
+            try {
+                val contentResolver = getApplication<android.app.Application>().contentResolver
+                val inputStream = contentResolver.openInputStream(imageUri) ?: run {
+                    _syncStatus.value = "Gagal: Tidak dapat membaca file gambar."
+                    return@launch
+                }
+                val imageBytes = inputStream.readBytes()
+                inputStream.close()
+
+                val mimeType = contentResolver.getType(imageUri) ?: "image/jpeg"
+                val ext = when (mimeType) {
+                    "image/png" -> "png"
+                    "image/webp" -> "webp"
+                    else -> "jpg"
+                }
+
+                val moshi = com.squareup.moshi.Moshi.Builder()
+                    .add(com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory())
+                    .build()
+                val okHttpClient = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+                val retrofit = retrofit2.Retrofit.Builder()
+                    .baseUrl(baseUrl)
+                    .client(okHttpClient)
+                    .addConverterFactory(retrofit2.converter.moshi.MoshiConverterFactory.create(moshi))
+                    .build()
+                val apiService = retrofit.create(KulaBoothApiService::class.java)
+
+                val apiKeyBody = okhttp3.RequestBody.create(okhttp3.MediaType.parse("text/plain"), config.apiKey)
+                val imageBody = okhttp3.RequestBody.create(okhttp3.MediaType.parse(mimeType), imageBytes)
+                val imagePart = okhttp3.MultipartBody.Part.createFormData(
+                    "image", "product_${productId}_${System.currentTimeMillis()}.$ext", imageBody
+                )
+
+                val response = apiService.uploadProductImage(apiKeyBody, imagePart)
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    if (body != null && body.success && body.imageUrl != null) {
+                        val product = allProducts.value.find { it.id == productId }
+                        if (product != null) {
+                            repository.upsertProductSettings(product.copy(imageUrl = body.imageUrl))
+                        }
+                        _syncStatus.value = "Gambar produk berhasil diupload!"
+                    } else {
+                        _syncStatus.value = "Gagal upload gambar: ${body?.error ?: "Error tidak diketahui"}"
+                    }
+                } else {
+                    _syncStatus.value = "Gagal upload gambar (HTTP ${response.code()})"
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _syncStatus.value = "Kesalahan upload gambar: ${e.localizedMessage ?: "Tidak dapat menghubungkan ke server"}"
+            }
+        }
     }
 
     fun clearAllSales() {
