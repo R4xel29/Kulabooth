@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 
 data class KulaBoothMetrics(
     val totalCapEx: Double = 0.0,
@@ -511,13 +513,7 @@ class KulaBoothViewModel(application: Application) : AndroidViewModel(applicatio
                 return@launch
             }
 
-            var baseUrl = config.baseUrl.trim()
-            if (!baseUrl.endsWith("/")) {
-                baseUrl += "/"
-            }
-            if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
-                baseUrl = "http://$baseUrl"
-            }
+            val baseUrl = config.getFormattedBaseUrl()
 
             val salesList = allSales.value
             val localProductsToSync = allProducts.value.filter { it.webId == null }.map { prod ->
@@ -654,13 +650,7 @@ class KulaBoothViewModel(application: Application) : AndroidViewModel(applicatio
                 return@launch
             }
 
-            var baseUrl = config.baseUrl.trim()
-            if (!baseUrl.endsWith("/")) {
-                baseUrl += "/"
-            }
-            if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
-                baseUrl = "http://$baseUrl"
-            }
+            val baseUrl = config.getFormattedBaseUrl()
 
             try {
                 val moshi = com.squareup.moshi.Moshi.Builder()
@@ -781,9 +771,7 @@ class KulaBoothViewModel(application: Application) : AndroidViewModel(applicatio
                 return@launch
             }
 
-            var baseUrl = config.baseUrl.trim()
-            if (!baseUrl.endsWith("/")) baseUrl += "/"
-            if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) baseUrl = "http://$baseUrl"
+            val baseUrl = config.getFormattedBaseUrl()
 
             try {
                 val contentResolver = getApplication<android.app.Application>().contentResolver
@@ -815,8 +803,10 @@ class KulaBoothViewModel(application: Application) : AndroidViewModel(applicatio
                     .build()
                 val apiService = retrofit.create(KulaBoothApiService::class.java)
 
-                val apiKeyBody = okhttp3.RequestBody.create(okhttp3.MediaType.parse("text/plain"), config.apiKey)
-                val imageBody = okhttp3.RequestBody.create(okhttp3.MediaType.parse(mimeType), imageBytes)
+                val mediaTypePlain = "text/plain".toMediaTypeOrNull()
+                val apiKeyBody = config.apiKey.toRequestBody(mediaTypePlain)
+                val mediaTypeImage = mimeType.toMediaTypeOrNull()
+                val imageBody = imageBytes.toRequestBody(mediaTypeImage)
                 val imagePart = okhttp3.MultipartBody.Part.createFormData(
                     "image", "product_${productId}_${System.currentTimeMillis()}.$ext", imageBody
                 )

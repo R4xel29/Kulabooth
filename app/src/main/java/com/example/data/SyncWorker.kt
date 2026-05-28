@@ -17,9 +17,7 @@ class SyncWorker(context: Context, workerParams: WorkerParameters) : CoroutineWo
                 return Result.success()
             }
 
-            var baseUrl = config.baseUrl.trim()
-            if (!baseUrl.endsWith("/")) baseUrl += "/"
-            if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) baseUrl = "http://$baseUrl"
+            val baseUrl = config.getFormattedBaseUrl()
 
             val salesList = repository.allSales.first()
             val localProductsToSync = repository.allProductSettings.first()

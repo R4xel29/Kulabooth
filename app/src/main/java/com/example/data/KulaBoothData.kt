@@ -70,7 +70,17 @@ data class ProductSettings(
     val workingDays: Int = 26,       // 26 days default
     val targetDailySales: Int = 50,  // 50 cups default
     val imageUrl: String? = null
-)
+) {
+    fun getResolvedImageUrl(apiConfig: ApiConfig?): String? {
+        if (imageUrl.isNullOrBlank()) return null
+        if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://") || imageUrl.startsWith("content://") || imageUrl.startsWith("file://")) {
+            return imageUrl
+        }
+        val baseUrl = apiConfig?.getFormattedBaseUrl() ?: "https://api.arumseduh.com/"
+        val cleanPath = if (imageUrl.startsWith("/")) imageUrl.substring(1) else imageUrl
+        return baseUrl + cleanPath
+    }
+}
 
 @Entity(tableName = "sales")
 data class Sale(
@@ -91,7 +101,41 @@ data class ApiConfig(
     val apiKey: String = "mb_live_a1b9f7c3e8d24b60a9c8e7f5d63b2a19",
     val autoSync: Boolean = false,
     val lastSyncTime: Long = 0L
-)
+) {
+    fun getFormattedBaseUrl(): String {
+        var url = baseUrl.trim()
+        if (url.isEmpty()) return "https://api.arumseduh.com/"
+
+        // Ensure http:// or https:// protocol is present first
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            url = "https://$url"
+        }
+
+        // List of all Next.js API route formats that should be stripped
+        val suffixes = listOf(
+            "/api/pos/sync/",
+            "/api/pos/sync",
+            "/api/pos/upload-image/",
+            "/api/pos/upload-image",
+            "/api/pos/",
+            "/api/pos",
+            "/api/",
+            "/api"
+        )
+
+        for (suffix in suffixes) {
+            if (url.endsWith(suffix)) {
+                url = url.substring(0, url.length - suffix.length)
+                break
+            }
+        }
+
+        if (!url.endsWith("/")) {
+            url += "/"
+        }
+        return url
+    }
+}
 
 
 

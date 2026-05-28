@@ -126,7 +126,9 @@ fun KulaBoothApp(viewModel: KulaBoothViewModel) {
                     onUpdateIngredient = viewModel::updateIngredientState,
                     onDeleteIngredient = viewModel::deleteIngredient,
                     onUpdateMasterIngredient = viewModel::updateMasterIngredientDirectly,
-                    onDeleteMasterIngredient = viewModel::deleteMasterIngredientDirectly
+                    onDeleteMasterIngredient = viewModel::deleteMasterIngredientDirectly,
+                    onUploadImage = viewModel::uploadAndSetProductImage,
+                    apiConfig = apiConfig ?: com.example.data.ApiConfig()
                 )
                 2 -> OpExTab(
                     opexItems = opexItems,
@@ -569,7 +571,9 @@ fun RecipeCostingTab(
     onUpdateIngredient: (Int, String, Double, Double, Double) -> Unit,
     onDeleteIngredient: (Int) -> Unit,
     onUpdateMasterIngredient: (Int, String, Double, Double) -> Unit,
-    onDeleteMasterIngredient: (Int) -> Unit
+    onDeleteMasterIngredient: (Int) -> Unit,
+    onUploadImage: (Int, android.net.Uri) -> Unit,
+    apiConfig: com.example.data.ApiConfig = com.example.data.ApiConfig()
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
     var editingIngredient by remember { mutableStateOf<IngredientWithMaster?>(null) }
@@ -657,9 +661,10 @@ fun RecipeCostingTab(
                                     .padding(horizontal = 14.dp, vertical = 8.dp)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (!prod.imageUrl.isNullOrBlank()) {
+                                    val resolvedUrl = prod.getResolvedImageUrl(apiConfig)
+                                    if (!resolvedUrl.isNullOrBlank()) {
                                         coil.compose.AsyncImage(
-                                            model = prod.imageUrl,
+                                            model = resolvedUrl,
                                             contentDescription = null,
                                             modifier = Modifier
                                                 .size(18.dp)
@@ -833,9 +838,10 @@ fun RecipeCostingTab(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    if (!settings.imageUrl.isNullOrBlank()) {
+                    val resolvedMainUrl = settings.getResolvedImageUrl(apiConfig)
+                    if (!resolvedMainUrl.isNullOrBlank()) {
                         coil.compose.AsyncImage(
-                            model = settings.imageUrl,
+                            model = resolvedMainUrl,
                             contentDescription = "Gambar ${settings.productName}",
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -853,7 +859,7 @@ fun RecipeCostingTab(
                             contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
                         ) { uri: android.net.Uri? ->
                             if (uri != null) {
-                                viewModel.uploadAndSetProductImage(settings.id, uri)
+                                onUploadImage(settings.id, uri)
                             }
                         }
 
@@ -1101,8 +1107,11 @@ fun RecipeCostingTab(
                     text = "Bahan Baku Per Porsi (${ingredients.size} Bahan)",
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
-                    color = Color(0xFF1E293B)
+                    color = Color(0xFF1E293B),
+                    modifier = Modifier.weight(1f)
                 )
+
+                Spacer(modifier = Modifier.width(8.dp))
 
                 Button(
                     onClick = { showAddDialog = true },
@@ -1906,11 +1915,12 @@ fun OpExTab(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text("TOTAL OPERASIONAL BULANAN", fontSize = 10.sp, color = EmeraldLight, fontWeight = FontWeight.Bold)
                             Text(Utils.formatRupiah(metrics.totalOpexMonthly), fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color.White)
                         }
-                        Column(horizontalAlignment = Alignment.End) {
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                             Text("BEBAN OPERASIONAL HARIAN", fontSize = 10.sp, color = EmeraldLight, fontWeight = FontWeight.Bold)
                             val displayOpexHarian = if (settings.workingDays > 0) metrics.totalOpexMonthly / settings.workingDays.toDouble() else 0.0
                             Text(Utils.formatRupiah(displayOpexHarian), fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color.White)
@@ -3272,39 +3282,47 @@ fun SalesReportTab(
                             Spacer(modifier = Modifier.height(16.dp))
 
                             // Action buttons: Save & Sync & Download Menu
+                            OutlinedButton(
+                                onClick = { onUpdateConfig(baseUrlState, apiKeyState, autoSyncState) },
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.5.dp, if (isSystemInDarkTheme()) Color.White.copy(alpha = 0.8f) else EmeraldPrimary),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = if (isSystemInDarkTheme()) Color.White else EmeraldPrimary
+                                ),
+                                contentPadding = PaddingValues(vertical = 12.dp),
+                                modifier = Modifier.fillMaxWidth().testTag("save_config_button")
+                            ) {
+                                Text("Simpan Setelan", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                OutlinedButton(
-                                    onClick = { onUpdateConfig(baseUrlState, apiKeyState, autoSyncState) },
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = EmeraldPrimary),
-                                    modifier = Modifier.weight(1f).testTag("save_config_button")
-                                ) {
-                                    Text("Simpan Setelan", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                }
-
                                 Button(
                                     onClick = { onSyncMenu() },
                                     shape = RoundedCornerShape(8.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp),
                                     modifier = Modifier.weight(1f).testTag("sync_menu_button")
                                 ) {
                                     Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Unduh Menu", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Unduh Menu", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                 }
 
                                 Button(
                                     onClick = { onSyncSales() },
                                     shape = RoundedCornerShape(8.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp),
                                     modifier = Modifier.weight(1f).testTag("sync_web_button")
                                 ) {
                                     Icon(Icons.Default.Upload, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Kirim Laporan", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Kirim Laporan", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                 }
                             }
 
